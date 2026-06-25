@@ -22,3 +22,5 @@ jobs:
         run: python tests/test_runtime.py
       - name: E2E tests
         run: python tests/test_e2e.py
+      - name: Orchestrator tests
+        run: python tests/test_orchestrator.py
