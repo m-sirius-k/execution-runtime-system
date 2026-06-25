@@ -15,10 +15,26 @@ on:
         required: true
 
 jobs:
+  log_intent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log Task Intent
+        env:
+          TASK_INTENT: ${{ github.event.inputs.task_intent }}
+          TASK_PARAMS: ${{ github.event.inputs.task_params }}
+          TRIGGERED_BY: ${{ github.actor }}
+        run: |
+          echo "===== TASK INTENT ====="
+          echo "intent: $TASK_INTENT"
+          echo "params: $TASK_PARAMS"
+          echo "triggered_by: $TRIGGERED_BY"
+          echo "timestamp: $(date -u)"
+
   # The "production" environment must be configured with required reviewers
   # in repo settings. That reviewer approval IS the human confirmation event
   # — this job cannot proceed without it, and there is no other path in.
   approval:
+    needs: log_intent
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -27,8 +43,21 @@ jobs:
   execute:
     needs: approval
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
     steps:
       - uses: actions/checkout@v4
+      - name: Log Approval Confirmation
+        env:
+          APPROVED_BY: ${{ github.actor }}
+          WORKFLOW_RUN: ${{ github.run_id }}
+          GIT_REF: ${{ github.ref }}
+        run: |
+          echo "===== APPROVAL LOG ====="
+          echo "approved_by: $APPROVED_BY"
+          echo "workflow_run: $WORKFLOW_RUN"
+          echo "ref: $GIT_REF"
+          echo "timestamp: $(date -u)"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -40,3 +69,45 @@ jobs:
           TASK_PARAMS: ${{ github.event.inputs.task_params }}
           HUMAN_IDENTITY: ${{ github.event.inputs.human_identity }}
         run: python runtime/cli.py
+      - name: Write Job Summary
+        if: always()
+        env:
+          TASK_INTENT: ${{ github.event.inputs.task_intent }}
+          TASK_PARAMS: ${{ github.event.inputs.task_params }}
+          APPROVED_BY: ${{ github.actor }}
+          WORKFLOW_RUN: ${{ github.run_id }}
+        run: |
+          {
+            echo "## Production Deployment Log"
+            echo "- Intent: $TASK_INTENT"
+            echo "- Params: $TASK_PARAMS"
+            echo "- Approved by: $APPROVED_BY"
+            echo "- Run ID: $WORKFLOW_RUN"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Create Audit Issue
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          TASK_INTENT: ${{ github.event.inputs.task_intent }}
+          TASK_PARAMS: ${{ github.event.inputs.task_params }}
+        with:
+          script: |
+            const intent = process.env.TASK_INTENT;
+            const params = process.env.TASK_PARAMS;
+            const actor = context.actor;
+            const runId = context.runId;
+            const ref = context.ref;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Deployment Audit - Run ${runId}`,
+              body: [
+                "## Deployment Audit Log",
+                "",
+                `- Intent: ${intent}`,
+                `- Params: ${params}`,
+                `- Actor: ${actor}`,
+                `- Run ID: ${runId}`,
+                `- Ref: ${ref}`,
+              ].join("\n"),
+            });
