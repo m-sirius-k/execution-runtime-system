@@ -70,6 +70,11 @@ jobs:
           TASK_PARAMS: ${{ github.event.inputs.task_params }}
           HUMAN_IDENTITY: ${{ github.event.inputs.human_identity }}
         run: python runtime/cli.py
+      - name: Stop on Critical Divergence
+        if: steps.run_core.outputs.divergence_status == 'CRITICAL'
+        run: |
+          echo "::error::Intent vs Execution divergence is CRITICAL — stopping the control loop."
+          exit 1
       - name: Write Job Summary
         if: always()
         env:
