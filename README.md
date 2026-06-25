@@ -78,4 +78,4 @@ FULLY IMPLEMENTED AND VERIFIED
 
 ## License
 
-(choose MIT or private/internal)
+MIT — see [LICENSE](LICENSE)
