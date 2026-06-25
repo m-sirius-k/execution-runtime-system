@@ -1,0 +1,42 @@
+name: Agent Execute
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_intent:
+        description: "Intent for the Task Spec"
+        required: true
+      task_params:
+        description: "JSON params for the Task Spec"
+        required: false
+        default: "{}"
+      human_identity:
+        description: "Identity of the human issuing this task"
+        required: true
+
+jobs:
+  # The "production" environment must be configured with required reviewers
+  # in repo settings. That reviewer approval IS the human confirmation event
+  # — this job cannot proceed without it, and there is no other path in.
+  approval:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: echo "Human approval gate passed for ${{ github.event.inputs.human_identity }}"
+
+  execute:
+    needs: approval
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run Task Spec -> Approval Gate -> Execution Core
+        env:
+          TASK_INTENT: ${{ github.event.inputs.task_intent }}
+          TASK_PARAMS: ${{ github.event.inputs.task_params }}
+          HUMAN_IDENTITY: ${{ github.event.inputs.human_identity }}
+        run: python runtime/cli.py
