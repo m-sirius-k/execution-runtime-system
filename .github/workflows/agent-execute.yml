@@ -64,6 +64,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Run Task Spec -> Approval Gate -> Execution Core
+        id: run_core
         env:
           TASK_INTENT: ${{ github.event.inputs.task_intent }}
           TASK_PARAMS: ${{ github.event.inputs.task_params }}
@@ -90,10 +91,14 @@ jobs:
         env:
           TASK_INTENT: ${{ github.event.inputs.task_intent }}
           TASK_PARAMS: ${{ github.event.inputs.task_params }}
+          DIVERGENCE_STATUS: ${{ steps.run_core.outputs.divergence_status }}
+          CHECKED_AT: ${{ steps.run_core.outputs.checked_at }}
         with:
           script: |
             const intent = process.env.TASK_INTENT;
             const params = process.env.TASK_PARAMS;
+            const divergenceStatus = process.env.DIVERGENCE_STATUS || "UNKNOWN";
+            const checkedAt = process.env.CHECKED_AT || "n/a";
             const actor = context.actor;
             const runId = context.runId;
             const ref = context.ref;
@@ -109,5 +114,7 @@ jobs:
                 `- Actor: ${actor}`,
                 `- Run ID: ${runId}`,
                 `- Ref: ${ref}`,
+                `- Divergence Status: ${divergenceStatus}`,
+                `- Checked At: ${checkedAt}`,
               ].join("\n"),
             });

@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from runtime.core import execution_core
+from runtime.core import divergence, execution_core
 from runtime.gate import approval_gate
 from runtime.security import crypto
 from runtime.spec.task_spec import TaskSpec, TaskSpecRejected
@@ -74,7 +74,22 @@ def main() -> int:
 
     result = execution_core.execute(spec, token["token_id"], verify_key, _identity_run)
 
-    print(json.dumps({"spec_id": spec.spec_id, "token_id": token["token_id"], **result}, indent=2))
+    intent_record = {"task": spec.intent, "expected_state": spec.params.get("expected_state")}
+    execution_record = {
+        "task": spec.intent if result["status"] == "success" else None,
+        "final_state": result.get("result"),
+        "warnings": (result.get("result") or {}).get("warnings") if isinstance(result.get("result"), dict) else None,
+    }
+    divergence_status = divergence.detect_divergence(intent_record, execution_record)
+    checked_at = datetime.now(timezone.utc).isoformat()
+
+    print(json.dumps({
+        "spec_id": spec.spec_id,
+        "token_id": token["token_id"],
+        "divergence_status": divergence_status,
+        "checked_at": checked_at,
+        **result,
+    }, indent=2))
 
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_path:
@@ -84,6 +99,15 @@ def main() -> int:
             fh.write(f"- issued_by: `{human_identity}`\n")
             fh.write(f"- status: `{result['status']}`\n")
             fh.write(f"- result: `{result['result']}`\n")
+            fh.write(f"- divergence_status: `{divergence_status}`\n")
+            fh.write(f"- checked_at: `{checked_at}`\n")
+
+    output_path = os.environ.get("GITHUB_OUTPUT")
+    if output_path:
+        with open(output_path, "a", encoding="utf-8") as fh:
+            fh.write(f"divergence_status={divergence_status}\n")
+            fh.write(f"checked_at={checked_at}\n")
+            fh.write(f"spec_id={spec.spec_id}\n")
 
     return 0 if result["status"] == "success" else 1
 
